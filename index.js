@@ -21,17 +21,26 @@ async function transcribe(voiceChannel, message) {
         // Value is 1 if user is speaking; if user speaking then...
         if (speaking.bitfield === 1) {
             
+            console.log(`I am listening to ${user.username}`);
             // Audio from user
             const audio = connection.receiver.createStream(user, {mode: 'pcm'});
 
             // PCM file output
             const file = fs.createWriteStream(`${user.id}.pcm`);
+
+            // await checkForFile(`./${user.id}.pcm`);
+
             audio.pipe(file);
 
         } else {
 
+            
             //Converts pcm file to mp3 file with userid name
             convert(user.id);
+
+            // await checkForFile(`./${user.id}.mp3`);
+
+            console.log(`I stopped listening to ${user.username}`);
 
             // Sends file to api to be uploaded
             const url = await uploadFile(`./${user.id}.mp3`);
@@ -41,14 +50,13 @@ async function transcribe(voiceChannel, message) {
 
             // Sends message with transcription
             message.channel.send(user.username + ' said: ' + words);
-            console.log(`I stopped listening to ${user.username}`);
         }
       });
 }
 
 // Gets passed file path of mp3 file to upload to api server for transcription
 function uploadFile(path) {
-   const file = fs.readFileSync(path, 'utf8');
+   const file = fs.readFileSync(path);
 
    // Post request to api for file upload
    return axios.post('https://api.assemblyai.com/v2/upload', file, {
@@ -62,10 +70,25 @@ function uploadFile(path) {
    });
 }
 
+async function checkForFile(path) {
+    const timer = ms => new Promise(res => setTimeout(res, ms))
+
+    const exist = fs.existsSync(path);
+
+    if (exist) {
+        return exist
+    }
+    else{
+        timer(3000);
+        checkForFile(path);
+    }
+}
 
 // Gets passed url of file after file upload
 async function getTranscription(url) {
+
     let text = '';
+    const timer = ms => new Promise(res => setTimeout(res, ms))
 
     // gets id from api after 
     const id = await axios.post('https://api.assemblyai.com/v2/transcript', {
@@ -78,13 +101,14 @@ async function getTranscription(url) {
     }).then(res => {
 
         // We need this later to get transcription status
-        return res.data.id
+        return res.data.id;
     });
 
     // Initialize status var to keep track of transcription status
     let status = "queued";
 
     while (status !== 'completed') {
+
         let data = await axios.get('https://api.assemblyai.com/v2/transcript/' + id, {
         // Headers
         headers: {
@@ -106,6 +130,14 @@ async function getTranscription(url) {
             // Returns message when receives error code from API
             return 'Error, voice could not be transcribed';
         }
+
+        console.log(status);
+        await timer(10000);
+
+    }
+
+    if (text === '') {
+        return "(INAUDIBLE)";
     }
     return text;
     
